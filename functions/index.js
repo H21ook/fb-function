@@ -1,8 +1,14 @@
+//Libraries
 const functions = require('firebase-functions');
 const express = require('express');
 const expressGraphQL = require('express-graphql');
+
+//ID
 const uuidv4 = require('uuid/v4');
 
+/**--------------------------------------------**/
+
+//GraphQLDataTypes
 const {
     GraphQLSchema,
     GraphQLObjectType,
@@ -14,13 +20,14 @@ const {
     GraphQLInputObjectType
 } = require('graphql');
 
+//Express
 const app = express();
 
 //Firebase
 const admin = require('firebase-admin');
 admin.initializeApp();
 
-//Types
+//ObjectTypes
 const PostType = new GraphQLObjectType({
     name: 'Post',
     description: 'Нийтлэл',
@@ -31,8 +38,8 @@ const PostType = new GraphQLObjectType({
         author: {
             type: UserType,
             resolve: async (post) => {
-                const usersCollection = await admin.firestore().collection('users').where('id', '==', post.authorID).get();
-                return usersCollection.docs.length > 0 ? usersCollection.docs[0].data() : null
+                const userDoc = await admin.firestore().doc(`users/${post.authorID}`).get();
+                return userDoc.data()
             }
         },
         createdAt: {type: GraphQLNonNull(GraphQLString)}
@@ -74,47 +81,97 @@ const InputPostType = new GraphQLInputObjectType({
     })
 });
 
+
+//RootObjectTypes
 const RootMutationType = new GraphQLObjectType({
     name: 'Mutation',
     description: 'Үндсэн mutation',
     fields: () => ({
-        saveUser: {
+        createUser: {
             type: UserType,
-            description: 'Хэрэглэгч хадгалах үйлдэл',
+            description: 'Хэрэглэгч үүсгэх үйлдэл',
             args: {
                 input: {type: InputUserType}
             },
             resolve: async (parent, args) => {
+                const _id = uuidv4();
                 const user = {
-                    id: uuidv4(),
-                    name: args.input.name,
-                    age: args.input.age
+                    id: _id,
+                    ...args.input
                 }
-
-                const createdUserDoc = await admin.firestore().collection('users').add(user);
-                const createdUser = await createdUserDoc.get();
-                return createdUser.data();
+                await admin.firestore().collection('users').doc(_id).create(user);
+                const createdUser = await admin.firestore().doc(`users/${_id}`).get();
+                return createdUser.data()
             }
         },
-        savePost: {
+        updateUser: {
+            type: UserType,
+            description: 'Хэрэглэгч Засах үйлдэл',
+            args: {
+                id: {type: GraphQLID},
+                input: {type: InputUserType}
+            },
+            resolve: async (parent, args) => {
+                await admin.firestore().doc(`users/${args.id}`).update(args.input);
+                const updatedUser =  await admin.firestore().doc(`users/${args.id}`).get();
+                return updatedUser.data();
+            }
+        },
+        deleteUser: {
+            type: UserType,
+            description: 'Хэрэглэгч устгах үйлдэл',
+            args: {
+                id: {type: GraphQLID}
+            },
+            resolve: async (parent, args) => {
+                const deletedUser =  await admin.firestore().doc(`users/${args.id}`).get();
+                await admin.firestore().doc(`users/${args.id}`).delete();
+                return deletedUser.data();
+            }
+        },
+        createPost: {
             type: PostType,
-            description: "Нийтлэл хадгалах үйлдэл",
+            description: "Нийтлэл үүсгэх үйлдэл",
             args: {
                 input: {type: InputPostType}
             },
             resolve: async (parent, args) => {
+                const _id = uuidv4();
                 const post = {
-                    id: uuidv4(),
-                    text: args.input.text,
-                    authorID: args.input.authorID,
+                    id: _id,
+                    ...args.input,
                     createdAt: new Date().toISOString()
                 }
-                const createdPostDoc = await admin.firestore().collection('posts').add(post);
-                
-                const createdPost = await createdPostDoc.get();
-                return createdPost.data();
+                await admin.firestore().collection('posts').doc(_id).create(post);
+                const createdPost = await admin.firestore().doc(`posts/${_id}`).get();
+                return createdPost.data()
             }
-        }
+        },
+        updatePost: {
+            type: PostType,
+            description: 'Нийтлэл Засах үйлдэл',
+            args: {
+                id: {type: GraphQLID},
+                input: {type: InputPostType}
+            },
+            resolve: async (parent, args) => {
+                await admin.firestore().doc(`posts/${args.id}`).update(args.input);
+                const updatedPost =  await admin.firestore().doc(`posts/${args.id}`).get();
+                return updatedPost.data();
+            }
+        },
+        deletePost: {
+            type: PostType,
+            description: 'Нийтлэл устгах үйлдэл',
+            args: {
+                id: {type: GraphQLID}
+            },
+            resolve: async (parent, args) => {
+                const deletedPost =  await admin.firestore().doc(`posts/${_id}`).get();
+                await admin.firestore().doc(`posts/${_id}`).delete();
+                return deletedPost.data();
+            }
+        },
     })
 })
 
@@ -145,8 +202,8 @@ const RootQueryType = new GraphQLObjectType({
                 id: {type: GraphQLID}
             },
             resolve: async (parent, args) => {
-                const usersCollection = await admin.firestore().collection('users').where('id', '==', args.id).get();
-                return usersCollection.docs.length > 0 ? usersCollection.docs[0].data() : null
+                const userDoc = await admin.firestore().doc(`users/${args.id}`).get();
+                return userDoc.data()
             }
         },
         post: {
@@ -156,8 +213,8 @@ const RootQueryType = new GraphQLObjectType({
                 id: {type: GraphQLID}
             },
             resolve: async (parent, args) => {
-                const postsCollection = await admin.firestore().collection('posts').where('id', '==', args.id).get();
-                return postsCollection.docs.length > 0 ? postsCollection.docs[0].data() : null
+                const postDoc = await admin.firestore().doc(`posts/${args.id}`).get();
+                return postDoc.data()
             }
         }
     }
